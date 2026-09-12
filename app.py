@@ -50,7 +50,7 @@ with st.sidebar:
     st.header("⚙️ Configuration")
     if not api_key:
         api_key = st.text_input("Gemini API Key", type="password", help="Paste your key here if not set in Secrets.")
-    st.info("AI Model: `gemini-2.5-flash`")
+    st.info("AI Model: `gemini-3.6-flash`")
 
 st.title("🛡️ Phishing & Social Engineering Deep-Scan Analyzer")
 st.caption("AI-Assisted Threat Triage & Incident Remediation")
@@ -86,7 +86,7 @@ with col2:
                     prompt = f"Analyze this {source_type} for cybersecurity threats:\n\n{sample_text}"
                     
                     response = client.models.generate_content(
-                        model="gemini-2.5-flash",
+                        model="gemini-3.6-flash",
                         contents=prompt,
                         config=types.GenerateContentConfig(
                             response_mime_type="application/json",
