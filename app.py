@@ -17,7 +17,7 @@ class ThreatAnalysis(BaseModel):
     threat_score: int = Field(description="Scam risk score from 0 to 100")
     threat_level: str = Field(description="Safe, Suspicious, or High Danger")
     scam_type: str = Field(description="Category e.g., 'Cold Outreach / Unsolicited', 'Fake Login Scam', or 'Internal Memo'")
-    score_reasoning: str = Field(description="Explicitly explain WHY this exact percentage was assigned (e.g., '10% because it mentions an attachment from an unfamiliar sender, but contains no hostile links')")
+    score_reasoning: str = Field(description="Explicitly explain WHY this exact percentage was assigned")
     simple_summary: str = Field(description="A 1-2 sentence plain English summary of what this message is trying to do")
     final_verdict: str = Field(description="A clear, practical 1-sentence bottom-line conclusion on what the user should decide")
     red_flags: list[str] = Field(description="List of suspicious cues, or empty list if message has none")
@@ -41,7 +41,6 @@ def create_gauge(score: int):
             ]
         }
     ))
-    # Generous margin so the title never crops
     fig.update_layout(height=280, margin=dict(l=30, r=30, t=60, b=20))
     return fig
 
@@ -121,7 +120,7 @@ with col2:
                     \"\"\"{content}\"\"\"
                     
                     Instructions:
-                    1. Score accuracy: If a message is mostly benign but mentions an attachment, an unsolicited cold outreach, or an unknown sender, score it between 5% and 20% and clearly explain in 'score_reasoning' why it isn't a strict 0%.
+                    1. Score accuracy: If a message is mostly benign but mentions an attachment, an unsolicited cold outreach, or an automated bank debit, score it between 5% and 20% and clearly explain in 'score_reasoning' why it isn't a strict 0%.
                     2. State a clear, non-technical bottom-line 'final_verdict'.
                     3. List red flags if any exist, or leave empty if completely normal.
                     """
@@ -172,8 +171,13 @@ with col2:
                             st.markdown(f"- ⚠️ {flag}")
                         
                     st.markdown("#### ✅ What You Should Do")
+                    # Replaced st.checkbox with word-wrapping markdown cards to eliminate text clipping
                     for action in result.what_to_do_now:
-                        st.checkbox(action, key=f"action_{action}")
+                        st.markdown(f"""
+                        <div style="background-color: rgba(255, 255, 255, 0.05); padding: 10px 14px; border-radius: 8px; margin-bottom: 8px; border-left: 3px solid #28a745; word-wrap: break-word;">
+                            👉 {action}
+                        </div>
+                        """, unsafe_allow_html=True)
                         
                 except Exception as e:
                     st.error(f"Analysis error: {str(e)}")
