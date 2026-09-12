@@ -12,14 +12,16 @@ st.set_page_config(
     layout="wide"
 )
 
-# Pydantic schema for plain-language output
+# Pydantic schema for plain-language output with score rationale & conclusion
 class ThreatAnalysis(BaseModel):
     threat_score: int = Field(description="Scam risk score from 0 to 100")
     threat_level: str = Field(description="Safe, Suspicious, or High Danger")
-    scam_type: str = Field(description="Category e.g., 'Fake Login Scam', 'Fake Boss Impersonation', or 'Legitimate Message'")
+    scam_type: str = Field(description="Category e.g., 'Cold Outreach / Unsolicited', 'Fake Login Scam', or 'Internal Memo'")
+    score_reasoning: str = Field(description="Explicitly explain WHY this exact percentage was assigned (e.g., '10% because it mentions an attachment from an unfamiliar sender, but contains no hostile links')")
     simple_summary: str = Field(description="A 1-2 sentence plain English summary of what this message is trying to do")
-    red_flags: list[str] = Field(description="List of suspicious cues, or empty list if message is safe")
-    what_to_do_now: list[str] = Field(description="Simple actionable steps for the user")
+    final_verdict: str = Field(description="A clear, practical 1-sentence bottom-line conclusion on what the user should decide")
+    red_flags: list[str] = Field(description="List of suspicious cues, or empty list if message has none")
+    what_to_do_now: list[str] = Field(description="Simple actionable next steps for the user")
 
 def create_gauge(score: int):
     color = "#28a745" if score < 30 else "#ffc107" if score < 65 else "#dc3545"
@@ -27,10 +29,10 @@ def create_gauge(score: int):
         mode="gauge+number",
         value=score,
         domain={'x': [0, 1], 'y': [0, 1]},
-        title={'text': "Scam Risk Level", 'font': {'size': 18}},
-        number={'suffix': "%", 'font': {'size': 26}},
+        title={'text': "Scam Risk Level", 'font': {'size': 20}},
+        number={'suffix': "%", 'font': {'size': 28}},
         gauge={
-            'axis': {'range': [0, 100]},
+            'axis': {'range': [0, 100], 'tickwidth': 1},
             'bar': {'color': color},
             'steps': [
                 {'range': [0, 30], 'color': "rgba(40, 167, 69, 0.15)"},
@@ -39,7 +41,8 @@ def create_gauge(score: int):
             ]
         }
     ))
-    fig.update_layout(height=230, margin=dict(l=20, r=20, t=30, b=10))
+    # Generous margin so the title never crops
+    fig.update_layout(height=280, margin=dict(l=30, r=30, t=60, b=20))
     return fig
 
 api_key = st.secrets.get("GEMINI_API_KEY", None)
@@ -48,11 +51,13 @@ with st.sidebar:
     st.header("🔑 Setup")
     if not api_key:
         api_key = st.text_input("Gemini API Key", type="password", help="Paste your key here.")
+    else:
+        st.success("API Key loaded from Secrets")
     st.markdown("""
     **How to use:**
     1. Paste any suspicious email, text message, or link.
     2. Click **Check This Message**.
-    3. Read the plain-language safety breakdown.
+    3. Read the plain-language safety breakdown and final verdict.
     """)
 
 st.title("🛡️ AI Scam & Phishing Detector")
@@ -116,9 +121,9 @@ with col2:
                     \"\"\"{content}\"\"\"
                     
                     Instructions:
-                    1. If the message is completely safe and normal, set scam_type to 'Legitimate Message' and return an empty list for red_flags.
-                    2. If suspicious or dangerous, explain why in red_flags.
-                    3. Keep what_to_do_now to simple actionable guidance.
+                    1. Score accuracy: If a message is mostly benign but mentions an attachment, an unsolicited cold outreach, or an unknown sender, score it between 5% and 20% and clearly explain in 'score_reasoning' why it isn't a strict 0%.
+                    2. State a clear, non-technical bottom-line 'final_verdict'.
+                    3. List red flags if any exist, or leave empty if completely normal.
                     """
                     
                     response = client.models.generate_content(
@@ -133,9 +138,12 @@ with col2:
                     
                     result = ThreatAnalysis(**json.loads(response.text))
                     
+                    # Uncropped Plotly gauge
                     st.plotly_chart(create_gauge(result.threat_score), use_container_width=True)
                     
-                    # Clean layout without truncation
+                    # Score Breakdown Explanation
+                    st.caption(f"**Why {result.threat_score}%?** {result.score_reasoning}")
+                    
                     m1, m2 = st.columns(2)
                     with m1:
                         st.markdown("**Threat Verdict**")
@@ -148,9 +156,17 @@ with col2:
                     st.markdown("#### What is this message trying to do?")
                     st.info(result.simple_summary)
                     
+                    st.markdown("#### 🎯 Final Conclusion")
+                    if result.threat_score < 30:
+                        st.success(f"**Bottom Line:** {result.final_verdict}")
+                    elif result.threat_score < 65:
+                        st.warning(f"**Bottom Line:** {result.final_verdict}")
+                    else:
+                        st.error(f"**Bottom Line:** {result.final_verdict}")
+                    
                     st.markdown("#### 🚩 Red Flags Detected")
                     if not result.red_flags:
-                        st.success("None — No suspicious cues, pressure tactics, or malicious links detected.")
+                        st.success("None — No manipulative language, false urgency, or malicious links detected.")
                     else:
                         for flag in result.red_flags:
                             st.markdown(f"- ⚠️ {flag}")
