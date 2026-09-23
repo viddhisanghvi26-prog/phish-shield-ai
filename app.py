@@ -45,16 +45,12 @@ def create_gauge(score: int):
     fig.update_layout(height=280, margin=dict(l=30, r=30, t=60, b=20))
     return fig
 
-# Fail-safe generator function across stable model endpoints
-def generate_with_failover(client, prompt):
-    models_to_try = [
-        "gemini-2.0-flash",
-        "gemini-1.5-flash",
-        "gemini-2.5-flash"
-    ]
+# Failover function that catches 503 high-demand errors automatically
+def run_model_safely(client, prompt):
+    models = ["gemini-2.0-flash", "gemini-1.5-flash"]
     last_err = None
-    for model_name in models_to_try:
-        for attempt in range(2):  # Quick retry if busy
+    for model_name in models:
+        for attempt in range(2):
             try:
                 response = client.models.generate_content(
                     model=model_name,
@@ -68,7 +64,7 @@ def generate_with_failover(client, prompt):
                 return response
             except Exception as e:
                 last_err = e
-                time.sleep(1)  # Brief pause before retrying
+                time.sleep(1)
                 continue
     raise last_err
 
@@ -153,10 +149,10 @@ with col2:
                     3. List red flags if any exist, or leave empty if completely normal.
                     """
                     
-                    response = generate_with_failover(client, prompt)
+                    response = run_model_safely(client, prompt)
                     result = ThreatAnalysis(**json.loads(response.text))
                     
-                    # Uncropped Plotly gauge
+                    # Risk Gauge
                     st.plotly_chart(create_gauge(result.threat_score), use_container_width=True)
                     
                     # Score Breakdown Explanation
