@@ -1,6 +1,5 @@
 import os
 import json
-import time
 import streamlit as st
 import plotly.graph_objects as go
 from google import genai
@@ -13,7 +12,7 @@ st.set_page_config(
     layout="wide"
 )
 
-# Pydantic schema for structured output
+# Pydantic schema for plain-language output with score rationale & conclusion
 class ThreatAnalysis(BaseModel):
     threat_score: int = Field(description="Scam risk score from 0 to 100")
     threat_level: str = Field(description="Safe, Suspicious, or High Danger")
@@ -44,29 +43,6 @@ def create_gauge(score: int):
     ))
     fig.update_layout(height=280, margin=dict(l=30, r=30, t=60, b=20))
     return fig
-
-# Failover function that catches 503 high-demand errors automatically
-def run_model_safely(client, prompt):
-    models = ["gemini-2.0-flash", "gemini-1.5-flash"]
-    last_err = None
-    for model_name in models:
-        for attempt in range(2):
-            try:
-                response = client.models.generate_content(
-                    model=model_name,
-                    contents=prompt,
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        response_schema=ThreatAnalysis,
-                        temperature=0.2,
-                    ),
-                )
-                return response
-            except Exception as e:
-                last_err = e
-                time.sleep(1)
-                continue
-    raise last_err
 
 api_key = st.secrets.get("GEMINI_API_KEY", None)
 
@@ -149,10 +125,19 @@ with col2:
                     3. List red flags if any exist, or leave empty if completely normal.
                     """
                     
-                    response = run_model_safely(client, prompt)
+                    response = client.models.generate_content(
+                        model="gemini-3.6-flash",
+                        contents=prompt,
+                        config=types.GenerateContentConfig(
+                            response_mime_type="application/json",
+                            response_schema=ThreatAnalysis,
+                            temperature=0.2,
+                        ),
+                    )
+                    
                     result = ThreatAnalysis(**json.loads(response.text))
                     
-                    # Risk Gauge
+                    # Uncropped Plotly gauge
                     st.plotly_chart(create_gauge(result.threat_score), use_container_width=True)
                     
                     # Score Breakdown Explanation
@@ -186,6 +171,7 @@ with col2:
                             st.markdown(f"- ⚠️ {flag}")
                         
                     st.markdown("#### ✅ What You Should Do")
+                    # Replaced st.checkbox with word-wrapping markdown cards to eliminate text clipping
                     for action in result.what_to_do_now:
                         st.markdown(f"""
                         <div style="background-color: rgba(255, 255, 255, 0.05); padding: 10px 14px; border-radius: 8px; margin-bottom: 8px; border-left: 3px solid #28a745; word-wrap: break-word;">
